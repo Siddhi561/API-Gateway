@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>API Gateway Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; padding: 24px; }
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    p.sub { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 900px; }
+    @media(max-width:600px){ .grid { grid-template-columns: 1fr; } }
+
+    .card { background: #1e2330; border: 1px solid #2d3448; border-radius: 10px; padding: 18px; }
+    .card h2 { font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; }
+
+    label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px; margin-top: 10px; }
+    input, select {
+      width: 100%; padding: 8px 10px; background: #0f1117;
+      border: 1px solid #2d3448; border-radius: 6px;
+      color: #e2e8f0; font-size: 13px; outline: none;
+    }
+    input:focus, select:focus { border-color: #6366f1; }
+
+    button {
+      margin-top: 14px; width: 100%; padding: 9px;
+      background: #6366f1; color: white; border: none;
+      border-radius: 6px; font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: background .15s;
+    }
+    button:hover { background: #4f46e5; }
+    button:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+
+    .badge {
+      display: inline-block; font-size: 10px; font-weight: 600;
+      padding: 2px 8px; border-radius: 99px; margin-right: 6px;
+    }
+    .badge-green { background: #14532d; color: #4ade80; }
+    .badge-red { background: #450a0a; color: #f87171; }
+    .badge-yellow { background: #422006; color: #fbbf24; }
+    .badge-blue { background: #172554; color: #60a5fa; }
+
+    .token-box {
+      font-size: 11px; background: #0f1117; border: 1px solid #2d3448;
+      border-radius: 6px; padding: 10px; word-break: break-all;
+      color: #4ade80; margin-top: 10px; min-height: 40px;
+    }
+    .result-box {
+      font-size: 11px; background: #0f1117; border: 1px solid #2d3448;
+      border-radius: 6px; padding: 10px; word-break: break-all;
+      margin-top: 10px; min-height: 60px; max-height: 200px;
+      overflow-y: auto; white-space: pre-wrap; color: #94a3b8;
+    }
+    .stats { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+    .stat { background: #0f1117; border: 1px solid #2d3448; border-radius: 6px; padding: 10px 14px; flex: 1; min-width: 80px; }
+    .stat .val { font-size: 20px; font-weight: 700; color: #e2e8f0; }
+    .stat .lbl { font-size: 10px; color: #64748b; margin-top: 2px; }
+    .rate-bar-wrap { margin-top: 10px; background: #0f1117; border-radius: 99px; height: 8px; overflow: hidden; }
+    .rate-bar { height: 100%; border-radius: 99px; background: #6366f1; transition: width .3s; }
+    #health-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; background: #374151; }
+
+    .log-box {
+      font-size: 11px; background: #0f1117; border: 1px solid #2d3448;
+      border-radius: 6px; padding: 10px; height: 140px;
+      overflow-y: auto; font-family: monospace; color: #94a3b8;
+    }
+    .log-entry { padding: 2px 0; border-bottom: 1px solid #1e2330; }
+    .log-entry.ok { color: #4ade80; }
+    .log-entry.err { color: #f87171; }
+    .log-entry.warn { color: #fbbf24; }
+    .full-width { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+
+<h1>🔀 API Gateway Dashboard</h1>
+<p class="sub">Test auth, rate limiting, and proxy routing in one place.</p>
+
+<div class="grid">
+
+  <!-- Card 1: Auth -->
+  <div class="card">
+    <h2>① Get JWT Token</h2>
+    <label>Username</label>
+    <input id="username" value="alice" placeholder="alice"/>
+    <label>Role</label>
+    <select id="role">
+      <option value="user">user</option>
+      <option value="admin">admin</option>
+    </select>
+    <button onclick="getToken()">Get Token</button>
+    <div class="token-box" id="token-display">Token will appear here...</div>
+  </div>
+
+  <!-- Card 2: Health -->
+  <div class="card">
+    <h2>② Gateway Health</h2>
+    <p style="font-size:13px;color:#94a3b8">Checks if the gateway and all its dependencies are running.</p>
+    <button onclick="checkHealth()">Check Health</button>
+    <div style="margin-top:14px;font-size:13px;">
+      <span id="health-dot"></span>
+      <span id="health-status">Not checked yet</span>
+    </div>
+    <div class="stats" id="health-stats" style="display:none">
+      <div class="stat"><div class="val" id="uptime-val">—</div><div class="lbl">Uptime (s)</div></div>
+      <div class="stat"><div class="val" id="env-val">—</div><div class="lbl">Environment</div></div>
+    </div>
+  </div>
+
+  <!-- Card 3: Proxy request -->
+  <div class="card">
+    <h2>③ Make Proxied Request</h2>
+    <label>Upstream Path</label>
+    <select id="proxy-path">
+      <option value="/api/posts">/api/posts</option>
+      <option value="/api/posts/1">/api/posts/1</option>
+      <option value="/api/users">/api/users</option>
+      <option value="/api/todos/1">/api/todos/1</option>
+    </select>
+    <label>Auth method</label>
+    <select id="auth-method">
+      <option value="jwt">JWT (from step 1)</option>
+      <option value="apikey">API Key</option>
+      <option value="none">None (should fail)</option>
+    </select>
+    <button onclick="makeRequest()">Send Request</button>
+    <div class="result-box" id="proxy-result">Response will appear here...</div>
+  </div>
+
+  <!-- Card 4: Rate limit meter -->
+  <div class="card">
+    <h2>④ Rate Limit Status</h2>
+    <p style="font-size:13px;color:#94a3b8">Updated automatically after every request.</p>
+    <div class="stats">
+      <div class="stat"><div class="val" id="rl-remaining">—</div><div class="lbl">Remaining</div></div>
+      <div class="stat"><div class="val" id="rl-limit">—</div><div class="lbl">Limit</div></div>
+      <div class="stat"><div class="val" id="rl-reset">—</div><div class="lbl">Reset (s)</div></div>
+    </div>
+    <div class="rate-bar-wrap"><div class="rate-bar" id="rate-bar" style="width:0%"></div></div>
+    <p style="font-size:11px;color:#64748b;margin-top:6px" id="rl-label">Make a request to see rate limit usage</p>
+  </div>
+
+  <!-- Card 5: Request log -->
+  <div class="card full-width">
+    <h2>⑤ Request Log</h2>
+    <div class="log-box" id="log-box">
+      <div class="log-entry">Waiting for requests...</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentToken = ''
+  const API_KEY = 'my-secure-api-key-for-scripts-1234' // match your .env
+
+  function addLog(msg, type = 'info') {
+    const box = document.getElementById('log-box')
+    const entry = document.createElement('div')
+    entry.className = `log-entry ${type === 'error' ? 'err' : type === 'warn' ? 'warn' : 'ok'}`
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`
+    box.prepend(entry)
+  }
+
+  function updateRateLimit(headers) {
+    const limit = headers.get('x-ratelimit-limit')
+    const remaining = headers.get('x-ratelimit-remaining')
+    const reset = headers.get('x-ratelimit-reset')
+    if (!limit) return
+
+    document.getElementById('rl-limit').textContent = limit
+    document.getElementById('rl-remaining').textContent = remaining
+    const resetIn = Math.max(0, reset - Math.floor(Date.now() / 1000))
+    document.getElementById('rl-reset').textContent = resetIn
+
+    const used = limit - remaining
+    const pct = Math.round((used / limit) * 100)
+    document.getElementById('rate-bar').style.width = `${pct}%`
+    document.getElementById('rate-bar').style.background = pct > 80 ? '#ef4444' : '#6366f1'
+    document.getElementById('rl-label').textContent = `${used} of ${limit} requests used (${pct}%)`
+  }
+
+  async function getToken() {
+    const username = document.getElementById('username').value.trim() || 'alice'
+    const role = document.getElementById('role').value
+    try {
+      const res = await fetch('/auth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, role })
+      })
+      const data = await res.json()
+      if (data.token) {
+        currentToken = data.token
+        document.getElementById('token-display').textContent = data.token
+        addLog(`Token issued for "${username}" (${role})`, 'ok')
+      } else {
+        document.getElementById('token-display').textContent = JSON.stringify(data)
+        addLog(`Token failed: ${JSON.stringify(data)}`, 'error')
+      }
+    } catch (e) {
+      addLog(`Token request error: ${e.message}`, 'error')
+    }
+  }
+
+  async function checkHealth() {
+    try {
+      const res = await fetch('/health')
+      const data = await res.json()
+      const dot = document.getElementById('health-dot')
+      dot.style.background = data.status === 'ok' ? '#4ade80' : '#f87171'
+      document.getElementById('health-status').textContent =
+        data.status === 'ok' ? 'Healthy' : 'Unhealthy'
+      document.getElementById('uptime-val').textContent = data.uptime
+      document.getElementById('env-val').textContent = data.environment ?? 'dev'
+      document.getElementById('health-stats').style.display = 'flex'
+      addLog(`Health check: ${data.status} — uptime ${data.uptime}s`, 'ok')
+    } catch (e) {
+      addLog(`Health check failed: ${e.message}`, 'error')
+    }
+  }
+
+  async function makeRequest() {
+    const path = document.getElementById('proxy-path').value
+    const authMethod = document.getElementById('auth-method').value
+    const resultBox = document.getElementById('proxy-result')
+
+    const headers = {}
+    if (authMethod === 'jwt') {
+      if (!currentToken) {
+        resultBox.textContent = 'No token yet — run Step 1 first.'
+        addLog('Request blocked — no token available', 'warn')
+        return
+      }
+      headers['Authorization'] = `Bearer ${currentToken}`
+    } else if (authMethod === 'apikey') {
+      headers['x-api-key'] = API_KEY
+    }
+
+    try {
+      resultBox.textContent = 'Loading...'
+      const res = await fetch(path, { headers })
+      const data = await res.json()
+      updateRateLimit(res.headers)
+      resultBox.textContent = JSON.stringify(data, null, 2)
+      const status = res.status
+      addLog(`${status} ${path} via ${authMethod}`, status >= 400 ? 'error' : 'ok')
+    } catch (e) {
+      resultBox.textContent = `Error: ${e.message}`
+      addLog(`Request failed: ${e.message}`, 'error')
+    }
+  }
+</script>
+</body>
+</html>
