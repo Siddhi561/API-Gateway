@@ -1,0 +1,1 @@
+process.env.API_KEY = 'test-api-key-for-testing-1234';
